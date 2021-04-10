@@ -1,7 +1,6 @@
 import tkinter as tk
 import math
 import random
-import itertools
 import copy
 
 canvas = None
@@ -26,6 +25,7 @@ CHANGE_MAP = {
   },
 }
 
+TILE_COLORS = ["#eee4da", "#eee1c9", "#f3b27a", "#f69664", "#f77c5f", "#f75f3b", "#edd073", "#edcc62"]
 SQUARE_LENGTH = 100
 RADIUS = SQUARE_LENGTH / 2 - 5
 POSITION = {"x": 8, "y": 8}
@@ -56,35 +56,61 @@ def create_canvas():
 
 def operate(event):
   if event.keysym in list(CHANGE_MAP.keys()):
-    game.move(event.keysym)
+    game.play(event.keysym)
 
 class Game:
   def __init__(self):
     self.tile_cols = [[None for i in range(4)] for j in range(4)]
+    self.is_finish = False
     for i, j in random.sample(PATTERNS, 2):
       self.tile_cols[j][i] = random.choice([2, 4])
     self.show_all()
 
-  def move(self, key):
+  def play(self, key):
+    if self.is_finish:
+      return None
     _tile_cols = copy.copy(self.tile_cols)
-    _tile_cols = self.change_direction('pre', key, _tile_cols)
-    _tile_cols = self.calc(_tile_cols)
-    _tile_cols = self.move_left(_tile_cols)
-    _tile_cols = self.change_direction('next', key, _tile_cols)
+    _tile_cols = self.move(_tile_cols, key)
 
-    if _tile_cols != self.tile_cols:
-      _tile_cols = self.append_number(_tile_cols)
-      self.tile_cols = _tile_cols
-      self.show_all()
+    if _tile_cols == self.tile_cols:
+      return None
+
+    _tile_cols = self.append_number(_tile_cols)
+
+    if self.get_empty_tile_cols(_tile_cols) == []:
+      is_changable = False
+      for change_key in list(CHANGE_MAP.keys()):
+        if _tile_cols != self.move(_tile_cols, change_key):
+          is_changable = True
+      if not is_changable:
+        self.is_finish = True
+
+    self.tile_cols = _tile_cols
+    self.show_all()
+
+    if self.is_finish:
+      self.show_result()
+
+  def move(self, tile_cols, key):
+    tile_cols = self.change_direction('pre', key, tile_cols)
+    tile_cols = self.move_left(tile_cols)
+    tile_cols = self.change_direction('next', key, tile_cols)
+    return tile_cols
 
   def is_empty(self, pair, tile_cols):
     return tile_cols[pair[1]][pair[0]] == None
 
   def append_number(self, tile_cols):
-    empty_tile_cols = list(filter(lambda pair: self.is_empty(pair, tile_cols), list(PATTERNS)))
+    empty_tile_cols = self.get_empty_tile_cols(tile_cols)
+    if empty_tile_cols == []:
+      return tile_cols
+
     append_pos = random.choice(empty_tile_cols)
     tile_cols[append_pos[1]][append_pos[0]] = random.choice([2, 4])
     return tile_cols
+
+  def get_empty_tile_cols(self, tile_cols):
+    return list(filter(lambda pair: self.is_empty(pair, tile_cols), list(PATTERNS)))
     
   def change_direction(self, stage, direction, tile_cols):
     if (CHANGE_MAP[direction][stage] == 'right_rotate'):
@@ -107,7 +133,7 @@ class Game:
     return _tile_cols
 
   def reverse(self, tile_cols):
-    return list(map(lambda ele: self.reverse_item(ele) , tile_cols))
+    return list(map(lambda tiles: self.reverse_item(tiles) , tile_cols))
 
   def reverse_item(self, tile_cols):
     _tile_cols = copy.copy(tile_cols)
@@ -115,40 +141,48 @@ class Game:
     return _tile_cols
 
   def move_left(self, tile_cols):
-    _tile_cols = []
-    for ele in tile_cols:
-      cnt = ele.count(None)
-      list_a_filtered = [x for x in ele if x] + [None for i in range(cnt)]
-      _tile_cols.append(list_a_filtered)
-    return _tile_cols
-
-  def calc(self, tile_cols):
-    return list(map(lambda ele: self.calc_ele(ele), tile_cols))
+    return list(map(lambda tiles: self.calc_tiles(tiles), tile_cols))
   
-  def calc_ele(self, ele):
-    cnt = ele.count(None)
-    _ele = [x for x in copy.copy(ele) if x]
-  
+  def calc_tiles(self, tiles):
+    _tiles, null_count = self.sort_tiles(copy.copy(tiles))
     i = 0
-    while(i + 1 < len(_ele)):
-      if _ele[i] == _ele[i + 1]:
-        _ele[i], _ele[i + 1] = _ele[i] * 2, None
+    while(i + 1 < len(_tiles)):
+      if _tiles[i] == _tiles[i + 1]:
+        _tiles[i], _tiles[i + 1] = _tiles[i] * 2, None
         i += 1
       i += 1
-    return _ele + [None for i in range(cnt)]
+    _tiles, null_count = self.sort_tiles(_tiles, null_count=null_count)
+    return _tiles + [None for i in range(null_count)]
+
+  def sort_tiles(self, tiles, null_count=0):
+    null_count += tiles.count(None)
+    _tiles = [tiles for tiles in tiles if tiles]
+    return _tiles, null_count
 
   def show_all(self):
     canvas.delete("count_text")
-    for i in range(4):
-      for j in range(4):
-        if self.tile_cols[j][i] != None:
-          self.set_number(self.tile_cols[j][i], i, j)
+    for i, j in PATTERNS:
+      if self.tile_cols[j][i] != None:
+        self.set_number(self.tile_cols[j][i], i, j)
 
   def set_number(self, num, x, y):
     center_x = POSITION["x"] + BORDER_WIDTH * x + BORDER_WIDTH / 2 + SQUARE_LENGTH * x + SQUARE_LENGTH / 2
     center_y = POSITION["y"] + BORDER_WIDTH * y + BORDER_WIDTH / 2 + SQUARE_LENGTH * y + SQUARE_LENGTH / 2
-    font_size = round(30 + 40 / len(str(num)))
-    canvas.create_text(center_x, center_y, text=num, justify="center", font=("", font_size), tag="count_text")
+    font_size = round(40 + 30 / len(str(num)))
+    font_color, bk_color = self.get_color(num)
+    canvas.create_rectangle(center_x - SQUARE_LENGTH / 2, center_y - SQUARE_LENGTH / 2, center_x + SQUARE_LENGTH / 2, center_y + SQUARE_LENGTH / 2, fill=bk_color, width=0, tag="count_text")
+    canvas.create_text(center_x, center_y, text=num, justify="center", font=("", font_size), tag="count_text", fill = font_color)
+
+  def show_result(self):
+    canvas.create_text(POSITION["x"] + LENGTH / 2, POSITION["y"] + LENGTH / 2, text="game over", justify="center", font=("", 70), tag="gameover", fill="#776e65")
+
+  def get_color(self, num):
+    font_color, bk_color = "#ffffff", TILE_COLORS[-1]
+    if (round(math.log2(num)) - 1) < len(TILE_COLORS):
+      bk_color = TILE_COLORS[(round(math.log2(num)) - 1)]
+    if num <= 4:
+      font_color = "#776e65"
+    return font_color, bk_color
   
 def play():
   global canvas
