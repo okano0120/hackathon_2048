@@ -69,6 +69,7 @@ class Game:
   def play(self, key):
     if self.is_finish:
       return None
+
     _tile_cols = copy.copy(self.tile_cols)
     _tile_cols = self.move(_tile_cols, key)
 
@@ -77,19 +78,24 @@ class Game:
 
     _tile_cols = self.append_number(_tile_cols)
 
-    if self.get_empty_tile_cols(_tile_cols) == []:
-      is_changable = False
-      for change_key in list(CHANGE_MAP.keys()):
-        if _tile_cols != self.move(_tile_cols, change_key):
-          is_changable = True
-      if not is_changable:
-        self.is_finish = True
+    if not self.get_is_changable(_tile_cols):
+      self.is_finish = True
 
     self.tile_cols = _tile_cols
     self.show_all()
 
     if self.is_finish:
       self.show_result()
+
+  def get_is_changable(self, tile_cols):
+    if self.get_empty_tile_cols(tile_cols) != []:
+      return True
+    else:
+      is_changable = False
+      for change_key in list(CHANGE_MAP.keys()):
+        if tile_cols != self.move(tile_cols, change_key):
+          is_changable = True
+      return is_changable
 
   def move(self, tile_cols, key):
     tile_cols = self.change_direction('pre', key, tile_cols)
